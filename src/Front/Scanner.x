@@ -15,13 +15,17 @@ $blank   = [\ \t]
 @identifier = [a-zA-Z_] [a-zA-Z0-9_\']*
 
 tokens :-
+    "--".*    ;
     $blank+   ;
     @newline  ;
+	"=="      {\s -> TokenTypeEq}
 	let       {\s -> TokenLet}
 	if     {\s -> TokenIf}
 	then   {\s -> TokenThen}
 	else   {\s -> TokenElse}
-	refl   {\s -> TokenRefl}
+	Refl   {\s -> TokenRefl}
+	subst  {\s -> TokenSubst}
+	by     {\s -> TokenBy}
 	\(     {\s -> TokenLP}
 	\)     {\s -> TokenRP}
 	\{     {\s -> TokenLB}
@@ -39,6 +43,7 @@ tokens :-
 	\=     {\s -> TokenEqual}
     Type   {\s -> TokenUniverse}
 	Unit   {\s -> TokenUnit}
+	Bool   {\s -> TokenTBool}
 	\-\>   {\s -> TokenArrow}
 	@identifier {\s -> TokenId s}
 
@@ -74,6 +79,9 @@ data Token
 	| TokenTypeDef
 	| TokenNL
 	| TokenRefl
+	| TokenTypeEq
+	| TokenSubst
+	| TokenBy
 	deriving (Show)
 
 main = do

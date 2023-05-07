@@ -9,6 +9,7 @@ import System.Exit(exitFailure)
 import System.Environment(getArgs, getProgName)
 
 
+
 main :: IO ()
 main = do
    args <- getArgs
@@ -19,8 +20,11 @@ main = do
 processFile :: String -> IO ()
 processFile filename =
         do withFile filename ReadMode (\h -> do contents <- hGetContents h
+                                                putStrLn ("Parsing the program: " ++ filename)
                                                 let program = parse contents
+                                                putStrLn "Dumping the program AST.."
                                                 print program
+                                                putStrLn "Type checking the program.."
                                                 infer program [])
 
 

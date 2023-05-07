@@ -41,16 +41,11 @@ data Term =
 	| TUnit
 	| Let String Term Term
 	| If Term Term Term
+	| Sigma String Term Term
+	| Pair Term Term
 	-- | Let (Unbound.Bind TName Term) Term
-	-- | TUnit
-	-- | VUnit
-	-- | TBool
-	-- | VBool Bool
-	-- | If Term Term Term
-	-- | Prod Term Term
 	-- | LetPair Term String Term
-	-- | Sigma (Unbound.Bind TName Term) Type
-    deriving (Show, Generic, Typeable)
+    deriving (Show, Generic, Typeable, Eq)
 
 
 data Sig = Sig {sigName :: String, sigType :: Type}
@@ -60,7 +55,13 @@ data Decl =
 	 TypeSig Sig
    | Def String Term
    | RecDef String Term
+   | Data String [ConstructorDef]
    deriving (Show)
+
+
+
+data ConstructorDef = ConstructorDef String Term
+	deriving (Show)
 
 mkSig :: String -> Type -> Decl
 mkSig name typ = TypeSig (Sig {sigName = name, sigType = typ})

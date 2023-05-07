@@ -8,5 +8,37 @@ true :: (A : Type) -> (x : A) -> (y : A) -> A.
 true = \A.\x.\y.x.
 
 false :: (A : Type) -> (x : A) -> (y : A) -> A.
-false = \B.\x.\y.y.
+false = \A.\x.\y.y.
+
+foo :: (x : Bool) -> (if x then ((x : Type) -> (y : x) -> x) else ((A : Type) -> (x : A) -> (y : A) -> A)).
+foo = \x. if x then id else true.
+
+bar :: Unit.
+bar = ().
+
+T :: (b : Bool) -> Type.
+T = \b. if b then Unit else Bool.
+
+ba :: (b : Bool) -> T b.
+ba = \b.if b then () else True.
+
+a :: (Bool | Unit).
+a = (True, ()).
+
+
+pair :: Type -> Type -> Type.
+pair = \p. \q. (c: Type) -> (p -> q -> c) -> c.
+
+prod :: (p:Type) -> (q:Type) -> p -> q -> pair p q.
+prod = \p.\q.\x.\y.\c.\f.f x y.
+
+
+falseproof :: Type.
+falseproof = (True == False).
+
+sym :: (A:Type) -> (x:A) -> (y:A) -> (x == y) -> x.
+--sym = \A.\x.\y.\pf.subst Refl by pf.
+
+
+
 

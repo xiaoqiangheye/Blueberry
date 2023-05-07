@@ -39,9 +39,14 @@ import qualified Unbound.Generics.LocallyNameless as Unbound
 	'|'        { TokenLine }
 	','        { TokenComma }
 	';'        { TokenSemicolon }
+	'=='       { TokenTypeEq }
+	'subst'    { TokenSubst}
+	'by'       { TokenBy }
 	-- newline    { TokenNL }
 	Id         { TokenId $$ }
 
+
+%nonassoc '=='
 
 %%
 
@@ -51,7 +56,7 @@ program :
    | {- empty -}   { Program []  }
 
 declas :
-	 decla declas  { $1:$2 }
+	 declas decla  { $2:$1 }
    | decla         { [$1] }
 
 decla :
@@ -65,29 +70,44 @@ decla :
 
 
 term :
-	   factors                                { $1 }
+	   ex                                     { $1 }
 	 |  '\\' Id '.' term          		      { Lam $2 $4 }
 	 | letExpr                                { $1 }
 	 | ifExpr                                 { $1 }
+	 
 
 
-factors :
-	  factor                  { $1 }
-	| factors factor	      { App $1 $2 }
+ex :
+      '(' Id ':' term ')' '->' ex        { PI $2 $4 $7 }
+	| funapp '->' ex                     { PI "_" $1 $3 }
+	| '(' Id ':' term '|' term ')'       { Sigma $2 $4 $6 }
+	| '(' term '|' term ')'              { Sigma "_" $2 $4}
+	| funapp                             { $1 }
+
+
+
+
+funapp : 
+	  funapp factor             { App $1 $2 }
+	| factor                    { $1 }
 
 
 factor : 
-      bconst                              { $1 }
-	| expProdOrAnnotOrParens 			  { $1 }
-	| Id                        		  { Var $1 }
-	--  | bconst 							  { $1 }
-	--  | letExpr 							  { $1 }
-	--  | ifExpr 							  { $1 }
+	  --expProdOrAnnotOrParens 			  { $1 }
+	  Id                        		  { Var $1 }
+	| '(' term ')'                        { $2 }
+	| '(' term ',' term ')'               { Pair $2 $4 }
+	| '(' term '==' term ')'             { TyEq $2 $4 }
+	| bconst 							  { $1 }
+
 
 
 letExpr : 'let' Id '=' term 'in' term               { Let $2 $4 $6 } 
 
 ifExpr : 'if' term 'then' term 'else' term          { If $2 $4 $6 }
+
+
+substExpr : 'subst' term 'by' term                  { Subst $2 $4 }
 
 bconst : 
 		  'Unit'                                    { TUnit }
@@ -96,6 +116,7 @@ bconst :
 		| 'True'                                    { VBool True }
 		| 'False'                                   { VBool False }
 		| 'Type'                                    { Type }
+		| 'refl'                                    { Refl }
 
 
 afterBinder:
