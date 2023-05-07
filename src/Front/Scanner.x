@@ -26,6 +26,7 @@ tokens :-
 	Refl   {\s -> TokenRefl}
 	subst  {\s -> TokenSubst}
 	by     {\s -> TokenBy}
+	contra {\s -> TokenContra}
 	\(     {\s -> TokenLP}
 	\)     {\s -> TokenRP}
 	\{     {\s -> TokenLB}
@@ -82,6 +83,7 @@ data Token
 	| TokenTypeEq
 	| TokenSubst
 	| TokenBy
+	| TokenContra
 	deriving (Show)
 
 main = do

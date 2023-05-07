@@ -28,6 +28,11 @@ fv (VBool _) = Set.empty
 fv (If e1 e2 e3) = Set.union (Set.union (fv e1) (fv e2)) (fv e3)
 fv (Pair e1 e2) = Set.union (fv e1) (fv e2)
 fv (Sigma x e1 e2) = Set.difference (Set.union (fv e1) (fv e2)) (Set.singleton x)
+fv (TyEq t1 t2) = Set.union (fv t1) (fv t2)
+fv Refl = Set.empty
+fv (Subst t1 t2) = Set.union (fv t1) (fv t2)
+fv (Contra t) = fv t
+
 -- fv (Prod e1 e2) = Set.union (fv e1) (fv e2)
 
 
@@ -49,6 +54,10 @@ subst n x (PI s t1 t2) | s == x = PI s t1 t2
 
 subst n x (Ann v t) = subst n x v
 subst n x (If a b1 b2) = If (subst n x a) (subst n x b1) (subst n x b2)
+subst n x (TyEq t1 t2) = TyEq (subst n x t1) (subst n x t2)
+subst n x Refl = Refl
+subst n x (Subst t1 t2) = Subst (subst n x t1) (subst n x t2)
+subst n x (Contra t) = Contra (subst n x t)
 subst n x e = e
 
 
@@ -96,7 +105,8 @@ inferProgram (def@(Def s t):ls) ctx =
         Right tysig -> (do let t1 = checkType t ctx tysig
                            case t1 of
                             Right t2 -> inferProgram ls (extendCtx ctx def)
-                            Left msg -> do putStrLn msg)
+                            Left msg -> do  putStrLn ("Type check failed when infer def: " ++ show def ++ ", tysig: " ++ show tysig)
+                                            putStrLn msg)
         Left msg -> do putStrLn msg
 
 inferProgram (a@(TypeSig sig):ls) ctx = inferProgram ls (extendCtx ctx a)
@@ -129,11 +139,11 @@ inferType TBool ctx Nothing = Right Type
 
 inferType (VBool _) ctx Nothing = Right TBool
 
-inferType (If a b1 b2) ctx Nothing = do
-    t <- checkType a ctx TBool
-    ty <- inferType b1 ctx Nothing
-    t2 <- eval ty ctx
-    checkType b2 ctx t2
+-- inferType (If a b1 b2) ctx Nothing = do
+--     t <- checkType a ctx TBool
+--     ty <- inferType b1 ctx Nothing
+--     t2 <- eval ty ctx
+--     checkType b2 ctx t2
 
 
 inferType (If a b1 b2) ctx (Just t) = do
@@ -142,9 +152,8 @@ inferType (If a b1 b2) ctx (Just t) = do
       (Var x) -> do
         ttrue <- eval (subst (VBool True) x t) ctx
         tfalse <- eval (subst (VBool False) x t) ctx
-        --Left $ show ttrue
-        checkType b1 ctx ttrue
-        checkType b2 ctx tfalse
+        -- checkType b1 (extendCtx ctx (Def x (VBool True))) t
+        -- checkType b2 (extendCtx ctx (Def x (VBool False))) t
         return t
       _ -> do t1 <- eval t ctx
               checkType b1 ctx t1
@@ -194,41 +203,62 @@ inferType (Lam x e1) ctx (Just (PI x1 tyA tyB)) = do
 inferType (Lam x e1) ctx (Just t) = Left (printTypeDoesNotMatch (Lam x e1) t)
 
 
-inferType Refl ctx (Just t@(TyEq a b)) = 
-    if equate a b 
-    then Right t 
-    else Left (printTypeDoesNotMatch Refl t)
+inferType Refl ctx (Just t@(TyEq a b)) =
+    do a' <- eval a ctx
+       b' <- eval b ctx
+       checkIsType a' b'
+       return t
 
-inferType (TyEq a b) ctx _ = do
+
+inferType (TyEq a b) ctx Nothing = do
     tA <- inferType a ctx Nothing
     tB <- inferType b ctx Nothing
-    checkIsType tA tB
+    tA' <- eval tA ctx
+    tB' <- eval tB ctx
+    checkIsType tA' tB'
+    return Type
+
+
+inferType (Subst a y) ctx (Just tA) =
+    do tyB <- inferType y ctx Nothing
+       tyB' <- eval tyB ctx
+       (x,x1) <- ensureTyEQ tyB
+       case (x,x1) of
+           (Var x2, Var x3) -> (do let t = checkType a ctx (subst (Var x2) x3 tA)
+                                   case t of
+                                     Left _ -> checkType a ctx (subst (Var x3) x2 tA)
+                                     _ -> return tA)
+           (Var x2, a2) -> (do checkType a ctx (subst a2 x2 tA)
+                               return tA)
+           (a2, Var x2) -> (do checkType a ctx (subst a2 x2 tA)
+                               return tA)
+           (_,_) ->  Left "not able to subst"
+
+inferType t@(Subst a y) ctx Nothing = Left $ "can't infer " ++ show t
+
+
+
+inferType (Contra t) ctx (Just tB) =
+    do tA <- inferType t ctx Nothing
+       tA' <- eval tA ctx
+       (a,b) <- ensureTyEQ tA'
+       a' <- eval a ctx
+       b' <- eval b ctx
+       case (a',b') of
+        (VBool True, VBool False) -> return tB
+        (VBool False, VBool True) -> return tB
+        _ -> Left ("can't use contra since neigher branch reduces to True = False or False = True, " ++ show a' ++ show b')
+
+
+
+-- inferType (Contra a) ctx (Just B) = 
+-- 	do inferType a ctx A = 
+
 
 inferType e ctx (Just t) = do typ <- inferType e ctx Nothing
                               t1 <- eval t ctx
                               t2 <- eval typ ctx
                               checkIsType t1 t2
-
-
--- inferType (Subst a y) ctx (Just tA) =
---     do tyB <- inferType y ctx Nothing
---        (x,x1) <- ensureTyEQ tyB
---        case (x,x1) of
---            (Var x,_) ->
---                     case checkType a ctx (subst a2 x tA) of
---                        Nothing -> case checkType a ctx (subst x a2 tA) of
--- 									    Nothing -> Nothing
--- 										Just e -> Just tA
--- 					   Just e -> Just tA
--- 		   (_, Var x) -> case checkType a ctx (subst a2 x tA) of
---                        Nothing -> case checkType a ctx (subst x a2 tA) of
--- 									    Nothing -> Nothing
--- 										Just e -> Just tA
--- 					   Just e -> Just tA
-
-
--- inferType (Contra a) ctx (Just B) = 
--- 	do inferType a ctx A = 
 
 
 ensureTyEQ (TyEq a b) = do return (a,b)
@@ -242,52 +272,92 @@ ensurePi t = Left "Not match PI"
 
 
 
+-- whnf :: Term -> Ctx -> Either String Term
+-- whnf (Lam x e) _ = Right (Lam x e)
+-- whnf (Ann e t) _ = whnf e
+-- whnf Type _ = Right Type
+-- whnf (Var x) _ = Right (Var x)
+-- whnf (PI s e1 e2) _ = Right (PI s e1 e2)
+-- whnf (App e1 e2) _ = do e1' <- eval e1 ctx
+--                         case e1' of
+--                          Lam x e -> return $ subst e2 x e
+--                          _ -> return $ App e1' e2
+-- whnf (If t1 t2 t3) ctx = do
+--     nf <- whnf t1
+--     case nf of
+--         (VBool bo) -> if bo then whnf t2 ctx else whnf t3 ctx
+--         _ -> return (If nf t2 t3)
+-- whnf (Subst tm pf) ctx = do
+--     pf' <- whnf pf
+--     case pf' of
+--         Refl -> whnf tm
+--         _ -> return (Subst rm pf')
+-- whnf e _ = return e
+
+
+
 eval :: Term -> Ctx -> Either String Term
-eval (If (VBool True) b1 b2) _ = Right b1
-eval (If (VBool False) b1 b2) _ = Right b2
-eval (If a b1 b2) ctx = do t <- eval a ctx
-                           case t of
-                            (VBool _) -> eval (If t b1 b2) ctx
-                            _ -> return $ If t b1 b2
-eval TBool _ = Right TBool
-eval (Sigma x t1 t2) ctx = do t1' <- eval t1 ctx
-                              t2' <- eval t2 ctx
-                              return $ Sigma x t1' t2'
-eval TUnit _ = Right TUnit
-eval VUnit _ = Right VUnit
-eval (VBool True) _ = Right $ VBool True
-eval (VBool False) _ = Right $ VBool False
+eval (If t1 t2 t3) ctx = do
+    nf <- eval t1 ctx
+    case nf of
+        (VBool bo) -> if bo then eval t2 ctx else eval t3 ctx
+        _ -> return (If nf t2 t3)
+
+-- eval TBool _ = Right TBool
+-- eval (Sigma x t1 t2) ctx = do t1' <- eval t1 ctx
+--                               t2' <- eval t2 ctx
+--                               return $ Sigma x t1' t2'
 eval (Ann e t) ctx = eval e ctx
-eval Type _ = Right Type
 eval (Var x) ctx = case lookupDef ctx x of
                         Right e -> Right e
                         Left _ -> return $ Var x
-eval (PI x tyA tyB) ctx = do tyA' <- eval tyA ctx
-                             tyB' <- eval tyB ctx
-                             return $ PI x tyA' tyB'
-eval (Lam x e) ctx = do u <- eval e ctx                    
+-- eval (PI x tyA tyB) ctx = do tyA' <- eval tyA ctx
+--                              tyB' <- eval tyB ctx
+--                              return $ PI x tyA' tyB'
+eval (Lam x e) ctx = do u <- eval e ctx
                         return $ Lam x u
 eval (App e1 e2) ctx = do e1' <- eval e1 ctx
                           case e1' of
                             Lam x e -> return $ subst e2 x e
                             _ -> do e2' <- eval e2 ctx
                                     return $ App e1' e2'
+eval (Subst tm pf) ctx = do
+    pf' <- eval pf ctx
+    case pf' of
+        Refl -> eval tm ctx
+        _ -> return (Subst tm pf')
+
+eval e ctx = return e
+-- eval (TyEq t1 t2) ctx = do t1' <- eval t1 ctx
+--                            t2' <- eval t2 ctx
+--                            return $ TyEq t1' t2'
+-- eval (Contra t) ctx = do t' <- eval t ctx
+--                          return $ Contra t'
 
 
-equate :: Term -> Term -> Bool
-equate Type Type = True
-equate TUnit TUnit = True
-equate VUnit VUnit = True
-equate TBool TBool = True
-equate (VBool x) (VBool y) = x == y
-equate (Var x) (Var y) = x == y
-equate (Lam x e) (Lam x1 e1) = equate e e1
-equate (Ann x _) (Ann x1 _) = equate x x1
-equate (PI x tyA tyB) (PI y tyA' tyB') = equate tyA tyA' && equate tyB tyB'
-equate (If a b1 b2) (If a' b1' b2') = equate a a' && equate b1 b1' && equate b2 b2'
-equate (App e1 e2) (App e1' e2') = equate e1 e1' && equate e2 e2'
-equate (Sigma x t1 t2) (Sigma y t1' t2') = equate t1 t1' && equate t2 t2'
-equate (Let x t1 t2) (Let y t1' t2') = x == y && equate t1 t1' && equate t2 t2'
+-- equate :: Term -> Term -> Either String ()
+-- equate t1 t2 = do
+--     n1 <- whnf t1
+--     n2 <- whnf t2
+--     case (n1,n2) of
+--         (Type,Type) -> return ()
+--         (Var y, Var y) | x== y -> return ()
+
+    
+-- equate n x
+-- equate Type Type = True
+-- equate TUnit TUnit = True
+-- equate VUnit VUnit = True
+-- equate TBool TBool = True
+-- equate (VBool x) (VBool y) = x == y
+-- equate (Var x) (Var y) = x == y
+-- equate (Lam x e) (Lam x1 e1) = equate e e1
+-- equate (Ann x _) (Ann x1 _) = equate x x1
+-- equate (PI x tyA tyB) (PI y tyA' tyB') = equate tyA tyA' && equate tyB tyB'
+-- equate (If a b1 b2) (If a' b1' b2') = equate a a' && equate b1 b1' && equate b2 b2'
+-- equate (App e1 e2) (App e1' e2') = equate e1 e1' && equate e2 e2'
+-- equate (Sigma x t1 t2) (Sigma y t1' t2') = equate t1 t1' && equate t2 t2'
+-- equate (Let x t1 t2) (Let y t1' t2') = x == y && equate t1 t1' && equate t2 t2'
 
 checkType :: Term -> Ctx -> Type -> Either String Type
 checkType e ctx t = inferType e ctx (Just t)

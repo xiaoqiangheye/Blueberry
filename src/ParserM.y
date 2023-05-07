@@ -42,6 +42,7 @@ import qualified Unbound.Generics.LocallyNameless as Unbound
 	'=='       { TokenTypeEq }
 	'subst'    { TokenSubst}
 	'by'       { TokenBy }
+	'contra'   { TokenContra }
 	-- newline    { TokenNL }
 	Id         { TokenId $$ }
 
@@ -74,6 +75,8 @@ term :
 	 |  '\\' Id '.' term          		      { Lam $2 $4 }
 	 | letExpr                                { $1 }
 	 | ifExpr                                 { $1 }
+	 | substExpr                              { $1 }
+	 | contraExpr                             { $1 }
 	 
 
 
@@ -97,7 +100,7 @@ factor :
 	  Id                        		  { Var $1 }
 	| '(' term ')'                        { $2 }
 	| '(' term ',' term ')'               { Pair $2 $4 }
-	| '(' term '==' term ')'             { TyEq $2 $4 }
+	| '(' term '==' term ')'              { TyEq $2 $4 }
 	| bconst 							  { $1 }
 
 
@@ -106,8 +109,9 @@ letExpr : 'let' Id '=' term 'in' term               { Let $2 $4 $6 }
 
 ifExpr : 'if' term 'then' term 'else' term          { If $2 $4 $6 }
 
-
 substExpr : 'subst' term 'by' term                  { Subst $2 $4 }
+
+contraExpr : 'contra' term                              { Contra $2 }
 
 bconst : 
 		  'Unit'                                    { TUnit }
@@ -142,7 +146,7 @@ expProdOrAnnotOrParens:
 data InParens = Colon Term Term | Nope Term
 
 parseError :: [Token] -> a
-parseError _ = error "Parse error"
+parseError tokens = error ("Parse error")
 
 categorizeColon :: Term -> Maybe Term -> InParens
 categorizeColon t Nothing = Nope t

@@ -19,26 +19,52 @@ bar = ().
 T :: (b : Bool) -> Type.
 T = \b. if b then Unit else Bool.
 
+-- define a type that has if in the type signature
 ba :: (b : Bool) -> T b.
 ba = \b.if b then () else True.
 
+-- define a sigma type
 a :: (Bool | Unit).
 a = (True, ()).
 
-
+-- define a pair Type
 pair :: Type -> Type -> Type.
 pair = \p. \q. (c: Type) -> (p -> q -> c) -> c.
 
+-- let's define a pair using church numerals
 prod :: (p:Type) -> (q:Type) -> p -> q -> pair p q.
 prod = \p.\q.\x.\y.\c.\f.f x y.
 
 
+--let's define a false proof
 falseproof :: Type.
 falseproof = (True == False).
 
-sym :: (A:Type) -> (x:A) -> (y:A) -> (x == y) -> x.
---sym = \A.\x.\y.\pf.subst Refl by pf.
+
+--let's prove that equality is symmetric and transitive
+sym :: (A:Type) -> (x:A) -> (y:A) -> (x == y) -> (y == x).
+sym = \A.\x.\y.\pr.subst Refl by pr.
 
 
+trans :: (A:Type) -> (x:A) -> (y:A) -> (z:A) -> (x == z) -> (z == y) -> (x == y).
+trans = \A.\x.\y.\z.\pf1.\pf2.subst pf1 by pf2.
 
 
+-- show that if f == g, x == y, then f x == g y
+f_cong :: (A:Type) -> (B : Type) -> (f : A -> B) -> (g : A -> B) 
+         -> (x:A) -> (y:A) 
+         -> (f == g) -> (x == y) -> (f x == g y).
+f_cong = \A.\B.\f.\g.\x.\y.\pf1.\pf2.subst (subst Refl by pf1) by pf2.
+
+
+void :: Type.
+void = (A:Type) -> A.
+
+neg :: Type -> Type.
+neg = \A.((A) -> void).
+
+not :: Bool -> Bool.
+not = \ x . if x then False else True.
+
+not_not_equal :: (b : Bool) -> (b == not b) -> void.
+not_not_equal = \b.\pf.if b then (contra pf) else (contra pf).
