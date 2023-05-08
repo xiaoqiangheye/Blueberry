@@ -314,8 +314,8 @@ eval (Var x) ctx = case lookupDef ctx x of
 -- eval (PI x tyA tyB) ctx = do tyA' <- eval tyA ctx
 --                              tyB' <- eval tyB ctx
 --                              return $ PI x tyA' tyB'
-eval (Lam x e) ctx = do u <- eval e ctx
-                        return $ Lam x u
+-- eval (Lam x e) ctx = do u <- eval e ctx
+--                         return $ Lam x u
 eval (App e1 e2) ctx = do e1' <- eval e1 ctx
                           case e1' of
                             Lam x e -> return $ subst e2 x e
