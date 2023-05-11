@@ -6,10 +6,10 @@ import Data.List
 import qualified Data.Set as Set
 import qualified Unbound.Generics.LocallyNameless as Unbound
 import System.IO(withFile, IOMode(ReadMode), hGetContents, hPutStrLn, stderr)
+import Data.Bool (Bool)
 
 
 
--- type Ctx = [(String, Type)]
 
 -- -- -- | Return the free variables in an expression
 fv :: Term -> Set.Set String
@@ -18,9 +18,6 @@ fv (Lam s e) = Set.difference (fv e) (Set.singleton s)
 fv (App e1 e2) = Set.union (fv e1) (fv e2)
 fv (PI s t1 t2) = Set.difference (Set.union (fv t1) (fv t2)) (Set.singleton s)
 fv (Ann x t) = fv x
--- fv (TrustMe) = Set.empty
--- fv (PrintMe) = Set.empty
--- fv (Let x e1 e2) = Set.difference (fv e2) (Set.singleton x)
 fv TUnit = Set.empty
 fv VUnit = Set.empty
 fv TBool = Set.empty
@@ -32,6 +29,8 @@ fv (TyEq t1 t2) = Set.union (fv t1) (fv t2)
 fv Refl = Set.empty
 fv (Subst t1 t2) = Set.union (fv t1) (fv t2)
 fv (Contra t) = fv t
+fv (Let x a b) = Set.difference (Set.union (fv a) (fv b)) (Set.singleton x)
+
 
 -- fv (Prod e1 e2) = Set.union (fv e1) (fv e2)
 
@@ -48,8 +47,8 @@ subst n x (Lam s e) | s == x = Lam s e
 
 subst n x (PI s t1 t2) | s == x = PI s t1 t2
                        | otherwise = if Set.notMember s (fv n)
-                                     then PI s t1 (subst n x t2)
-                                     else PI newvar t1 (subst n x (subst (Var newvar) s t2))
+                                     then PI s (subst n x t1) (subst n x t2)
+                                     else PI newvar (subst n x t1) (subst n x (subst (Var newvar) s t2))
  where newvar = pickFresh (Set.union (fv n) (fv t2)) s
 
 subst n x (Ann v t) = subst n x v
@@ -58,6 +57,12 @@ subst n x (TyEq t1 t2) = TyEq (subst n x t1) (subst n x t2)
 subst n x Refl = Refl
 subst n x (Subst t1 t2) = Subst (subst n x t1) (subst n x t2)
 subst n x (Contra t) = Contra (subst n x t)
+subst n x (Let s a b) | x == s = Let s a b
+                      | otherwise = if Set.notMember s (fv n)
+                                    then Let s (subst n x a) (subst n x b)
+                                    else Let newvar (subst n x a) (subst n x (subst (Var newvar) s b))
+ where newvar = pickFresh (Set.union (fv n) (fv b)) s
+
 subst n x e = e
 
 
@@ -77,9 +82,9 @@ extendCtx ctx delc = delc : ctx
 extendCtxs :: Ctx -> [Decl] -> Ctx
 extendCtxs ctx decl = decl ++ ctx
 
-checkIsType :: Type -> Type -> Either String Type
-checkIsType t1 t2 | t1 == t2 = Right t1
-                  | otherwise = Left $ printTypeDoesNotMatch t1 t2
+checkIsType :: Type -> Type -> Ctx -> Either String Type
+checkIsType t1 t2 ctx | equal t1 t2 ctx = Right t1
+                      | otherwise = Left $ printTypeDoesNotMatch t1 t2
 
 
 lookupTy :: Ctx -> String -> Either String Type
@@ -139,13 +144,6 @@ inferType TBool ctx Nothing = Right Type
 
 inferType (VBool _) ctx Nothing = Right TBool
 
--- inferType (If a b1 b2) ctx Nothing = do
---     t <- checkType a ctx TBool
---     ty <- inferType b1 ctx Nothing
---     t2 <- eval ty ctx
---     checkType b2 ctx t2
-
-
 inferType (If a b1 b2) ctx (Just t) = do
     checkType a ctx TBool
     case a of
@@ -200,13 +198,25 @@ inferType (Lam x e1) ctx (Just (PI x1 tyA tyB)) = do
     else Left (printVarDoesNotMatch x x1))
 
 
+inferType (Let x a b) ctx (Just tB) = do
+    tA <- inferType a ctx Nothing
+    checkType b (extendCtx (extendCtx ctx (mkSig x tA)) (Def x a)) tB
+    return tB
+
+inferType (Let x a b) ctx Nothing = do
+    tA <- inferType a ctx Nothing
+    tB <- inferType b (extendCtx (extendCtx ctx (mkSig x tA)) (Def x a)) Nothing
+    return (subst a x tB)
+
+
+
 inferType (Lam x e1) ctx (Just t) = Left (printTypeDoesNotMatch (Lam x e1) t)
 
 
 inferType Refl ctx (Just t@(TyEq a b)) =
     do a' <- eval a ctx
        b' <- eval b ctx
-       checkIsType a' b'
+       checkIsType a' b' ctx
        return t
 
 
@@ -215,7 +225,7 @@ inferType (TyEq a b) ctx Nothing = do
     tB <- inferType b ctx Nothing
     tA' <- eval tA ctx
     tB' <- eval tB ctx
-    checkIsType tA' tB'
+    checkIsType tA' tB' ctx
     return Type
 
 
@@ -258,7 +268,7 @@ inferType (Contra t) ctx (Just tB) =
 inferType e ctx (Just t) = do typ <- inferType e ctx Nothing
                               t1 <- eval t ctx
                               t2 <- eval typ ctx
-                              checkIsType t1 t2
+                              checkIsType t1 t2 ctx
 
 
 ensureTyEQ (TyEq a b) = do return (a,b)
@@ -333,6 +343,37 @@ eval e ctx = return e
 --                            return $ TyEq t1' t2'
 -- eval (Contra t) ctx = do t' <- eval t ctx
 --                          return $ Contra t'
+
+
+equal :: Term -> Term -> Ctx -> Bool
+equal e1 e2 ctx =
+    let e1' = eval e1 ctx in
+    let e2' = eval e2 ctx in
+    case (e1',e2') of
+        (Right e1'', Right e2'') -> equate e1'' e2''
+        _ -> False
+  where
+    equate (Var x1) (Var x2) = x1 == x2
+    equate (App e1 e2) (App e1' e2') = equal e1 e1' ctx && equal e2 e2' ctx
+    equate (PI x e1 e2) (PI x' e1' e2') = 
+        equal e1 e1' ctx && equal e2 (subst (Var x) x' e2') ctx
+    equate (Lam x e) (Lam y e') = equal e (subst (Var x) y e') ctx
+    equate (Ann x _) (Ann x1 _) = equal x x1 ctx
+    equate (If a b1 b2) (If a' b1' b2') = equal a a' ctx && equal b1 b1' ctx && equal b2 b2' ctx
+    equate (Sigma x t1 t2) (Sigma y t1' t2') = 
+        equal t1 t1' ctx && equal t2 (subst (Var x) y t2') ctx
+    equate (Let x t1 t2) (Let y t1' t2') = x == y && equal t1 t1' ctx && equal t2 t2' ctx
+    equate (VBool x) (VBool y) = x == y
+    equate (TyEq t1 t2) (TyEq t1' t2') = equal t1 t1' ctx && equal t2 t2' ctx
+    equate (Contra t') (Contra t) = equal t t' ctx
+    equate (Subst a y) (Subst a' y') = equal a a' ctx && equal y y' ctx
+    equate Type Type = True
+    equate TUnit TUnit = True
+    equate VUnit VUnit = True
+    equate TBool TBool = True
+    equate Refl Refl = True
+    equate (Pair x y) (Pair x' y') = equal x x' ctx && equal y y' ctx
+    equate e1 e2 = False
 
 
 -- equate :: Term -> Term -> Either String ()

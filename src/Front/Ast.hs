@@ -15,8 +15,6 @@ import Data.Typeable (Typeable)
 
 type Type = Term
 
-type TName = Unbound.Name Term
-
 
 newtype Program = Program [Decl]
     deriving (Show, Typeable)

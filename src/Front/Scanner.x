@@ -21,6 +21,7 @@ tokens :-
 	"=="      {\s -> TokenTypeEq}
 	let       {\s -> TokenLet}
 	if     {\s -> TokenIf}
+	in     {\s -> TokenIn}
 	then   {\s -> TokenThen}
 	else   {\s -> TokenElse}
 	Refl   {\s -> TokenRefl}

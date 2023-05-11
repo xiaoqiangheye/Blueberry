@@ -26,11 +26,9 @@ source-repository head
 library
   exposed-modules:
       Front.Ast
-      Front.Parse
+      Front.ParserM
       Front.Scanner
       Front.Typecheck
-      Lib
-      ParserM
   other-modules:
       Paths_blueberry
   hs-source-dirs:

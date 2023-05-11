@@ -1,8 +1,12 @@
+
 id :: (x : Type) -> (y : x) -> x.
 id = \x.\y.y.
 
-idid :: (x : Type) -> (y : x) -> x.
+idid :: (x:Type) -> (y : x) -> x.
 idid = id.
+
+id2 :: (x : Type) -> x -> x.
+id2 = \x.\y.y.
 
 true :: (A : Type) -> (x : A) -> (y : A) -> A.
 true = \A.\x.\y.x.
@@ -23,7 +27,7 @@ T = \b. if b then Unit else Bool.
 ba :: (b : Bool) -> T b.
 ba = \b.if b then () else True.
 
--- define a sigma type
+-- define a build in pair
 a :: (Bool | Unit).
 a = (True, ()).
 
@@ -34,6 +38,7 @@ pair = \p. \q. (c: Type) -> (p -> q -> c) -> c.
 -- let's define a pair using church numerals
 prod :: (p:Type) -> (q:Type) -> p -> q -> pair p q.
 prod = \p.\q.\x.\y.\c.\f.f x y.
+
 
 
 --let's define a false proof
@@ -66,6 +71,13 @@ neg = \A.((A) -> void).
 not :: Bool -> Bool.
 not = \ x . if x then False else True.
 
+
+-- define a let expression
+letnot :: Bool -> Bool.
+letnot = \y.let x = y in not x.
+
+
+
 not_not_equal :: (b : Bool) -> (b == not b) -> void.
 not_not_equal = \b.\pf.if b then (contra pf) else (contra pf).
 
@@ -95,5 +107,3 @@ false_eq_bool = \n.\m.\nnm.
                   else Refl
         else if m then Refl
                   else nnm Refl (eq_bool n m == False).
-
-

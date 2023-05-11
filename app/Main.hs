@@ -1,8 +1,7 @@
 module Main (main) where
 
-import Lib
 -- import Front.Parse (parse)
-import ParserM (parse)
+import Front.ParserM (parse)
 import Front.Typecheck
 import System.IO(withFile, IOMode(ReadMode), hGetContents, hPutStrLn, stderr)
 import System.Exit(exitFailure)
