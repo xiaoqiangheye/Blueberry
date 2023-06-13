@@ -1,5 +1,8 @@
 # Blueberry-A dependently typed language
 
+Refers to COMS 6998 Types, Languages, and Compilers by Columbia, http://www.cs.columbia.edu/~sedwards/classes/2023/6998-spring-tlc/index.html
+Refers to the tutorial, "Implementing Dependent Types in pi-forall" by Stephanie Weirich
+
 ## build the program by
 	stack build
 
